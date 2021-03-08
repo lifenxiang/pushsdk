@@ -60,7 +60,7 @@ static int cmd_history_last = 0;
 static int cmd_history_cursor = 0;
 static int cmd_cursor_dir = 1;
 static bool stop;
-static PushServer server;
+static push_server_t server;
 static bool svr_isset;
 
 WINDOW *output_win_border, *output_win;
@@ -432,8 +432,15 @@ static void svr(int argc, char **argv)
     svr_isset = true;
 }
 
+static bool is_fcm(const char *psp)
+{
+    return !strcmp(psp, "fcm");
+}
+
 static void sub(int argc, char *argv[])
 {
+    fcm_subscriber_t fcm;
+    apns_subscriber_t apns;
     int rc;
 
     if (argc != 5) {
@@ -446,12 +453,17 @@ static void sub(int argc, char *argv[])
         return;
     }
 
-    rc = subscribe(&server, argv[1], argv[2], argv[3], argv[4]);
+    rc = subscribe_push_service(&server,
+                                is_fcm(argv[3]) ?
+                                fcm_subscriber_init(&fcm, argv[1], argv[2], argv[4]) :
+                                apns_subscriber_init(&apns, argv[1], argv[2], argv[4]));
     output("status: %d\n", rc);
 }
 
 static void unsub(int argc, char *argv[])
 {
+    fcm_subscriber_t fcm;
+    apns_subscriber_t apns;
     int rc;
 
     if (argc != 5) {
@@ -464,12 +476,17 @@ static void unsub(int argc, char *argv[])
         return;
     }
 
-    rc = unsubscribe(&server, argv[1], argv[2], argv[3], argv[4]);
+    rc = unsubscribe_push_service(&server,
+                                  is_fcm(argv[3]) ?
+                                  fcm_subscriber_init(&fcm, argv[1], argv[2], argv[4]) :
+                                  apns_subscriber_init(&apns, argv[1], argv[2], argv[4]));
     output("status: %d\n", rc);
 }
 
 static void addpsp(int argc, char *argv[])
 {
+    registered_project_key_t fcm;
+    registered_certificate_t apns;
     int rc;
 
     if (argc != 5) {
@@ -482,12 +499,17 @@ static void addpsp(int argc, char *argv[])
         return;
     }
 
-    rc = add_push_service_provider(&server, argv[1], argv[2], argv[3], argv[4]);
+    rc = register_push_service(&server,
+                               is_fcm(argv[2]) ?
+                               registered_project_key_init(&fcm, argv[1], argv[3], argv[4]) :
+                               registered_certificate_init(&apns, argv[1], argv[3], argv[4]));
     output("status: %d\n", rc);
 }
 
 static void rmpsp(int argc, char *argv[])
 {
+    registered_project_key_t fcm;
+    registered_certificate_t apns;
     int rc;
 
     if (argc != 5) {
@@ -500,12 +522,16 @@ static void rmpsp(int argc, char *argv[])
         return;
     }
 
-    rc = remove_push_service_provider(&server, argv[1], argv[2], argv[3], argv[4]);
+    rc = unregister_push_service(&server,
+                                 is_fcm(argv[2]) ?
+                                 registered_project_key_init(&fcm, argv[1], argv[3], argv[4]) :
+                                 registered_certificate_init(&apns, argv[1], argv[3], argv[4]));
     output("status: %d\n", rc);
 }
 
 static void push(int argc, char *argv[])
 {
+    message_t msg;
     int rc;
 
     if (argc != 4) {
@@ -518,7 +544,7 @@ static void push(int argc, char *argv[])
         return;
     }
 
-    rc = send_push(&server, argv[1], argv[2], argv[3]);
+    rc = send_push_message(&server, message_init(&msg, argv[1], argv[2], argv[3]));
     output("status: %d\n", rc);
 }
 

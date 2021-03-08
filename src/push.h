@@ -49,33 +49,75 @@ extern "C" {
   #define CARRIER_API
 #endif
 
-typedef struct PushServer {
+#ifdef CARRIER_BUILD
+    #include "push_opaque.h"
+#else
+    #include <push_opaque.h>
+#endif
+
+typedef struct registered_data registered_data_t;
+typedef struct registered_project_key registered_project_key_t;
+typedef struct registered_certificate registered_certificate_t;
+
+typedef struct subscriber subscriber_t;
+typedef struct fcm_subscriber fcm_subscriber_t;
+typedef struct apns_subscriber apns_subscriber_t;
+
+typedef struct message message_t;
+
+typedef struct push_server {
     char *host;
     char *port;
-} PushServer;
+} push_server_t;
 
 CARRIER_API
-int subscribe(const PushServer *server, const char *scope,
-              const char *subscriber, const char *push_service_type,
-              const char *reg_id_or_dev_token);
+const registered_data_t *registered_project_key_init(registered_project_key_t *data,
+                                                     const char *scope,
+                                                     const char *project_id,
+                                                     const char *api_key);
 
 CARRIER_API
-int unsubscribe(const PushServer *server, const char *scope,
-                const char *subscriber, const char *push_service_type,
-                const char *reg_id_or_dev_token);
+const registered_data_t *registered_certificate_init(registered_certificate_t *data,
+                                                     const char *scope,
+                                                     const char *certificate_path,
+                                                     const char *private_key_path);
 
 CARRIER_API
-int add_push_service_provider(const PushServer *server, const char *scope,
-                              const char *push_service_type, const char *project_id_or_cert_path,
-                              const char *api_key_or_sk_path);
+int register_push_service(const push_server_t *push_server,
+                          const registered_data_t *data);
 
 CARRIER_API
-int remove_push_service_provider(const PushServer *server, const char *scope,
-                                 const char *push_service_type, const char *project_id_or_cert_path,
-                                 const char *api_key_or_sk_path);
+int unregister_push_service(const push_server_t *push_server,
+                            const registered_data_t *data);
 
 CARRIER_API
-int send_push(const PushServer *server, const char *scope, const char *subscriber, const char *message);
+const subscriber_t *fcm_subscriber_init(fcm_subscriber_t *subscriber,
+                                        const char *scope,
+                                        const char *event_id,
+                                        const char *register_id);
+
+CARRIER_API
+const subscriber_t *apns_subscriber_init(apns_subscriber_t *subscriber,
+                                         const char *scope,
+                                         const char *event_id,
+                                         const char *device_token);
+
+CARRIER_API
+int subscribe_push_service(const push_server_t *push_server,
+                           const subscriber_t *subscriber);
+CARRIER_API
+int unsubscribe_push_service(const push_server_t *push_server,
+                             const subscriber_t *subscriber);
+
+CARRIER_API
+const message_t *message_init(message_t *message,
+                              const char *scope,
+                              const char *event_id,
+                              const char *content);
+
+CARRIER_API
+int send_push_message(const push_server_t *push_server,
+                      const message_t *message);
 
 #ifdef __cplusplus
 }
