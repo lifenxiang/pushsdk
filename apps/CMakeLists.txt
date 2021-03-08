@@ -12,3 +12,7 @@ endif()
 add_submodule(pushshell
     DIRECTORY shell
     DEPENDS ${DEPEND_MODULES})
+
+add_submodule(pushtool
+    DIRECTORY tool
+    DEPENDS push0)
