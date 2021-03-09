@@ -9,8 +9,7 @@ set(SRC
     push.c)
 
 set(HEADERS
-    push.h
-    push_opaque.h)
+    push.h)
 
 include_directories(
     ${CARRIER_INT_DIST_DIR}/include)

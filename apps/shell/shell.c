@@ -432,16 +432,19 @@ static void svr(int argc, char **argv)
     svr_isset = true;
 }
 
-static bool is_fcm(const char *psp)
-{
-    return !strcmp(psp, "fcm");
-}
-
 static void sub(int argc, char *argv[])
 {
-    fcm_subscriber_t fcm;
-    apns_subscriber_t apns;
     int rc;
+    struct args {
+        const char *cmd;
+        const char *scope;
+        const char *ev_id;
+        union {
+            const subscribed_cookie_t cookie;
+            const subscribed_project_id_t prj_id;
+            const subscribed_dev_token_t dev_token;
+        } suber;
+    } *args = (struct args *)argv;
 
     if (argc != 5) {
         output("Invalid command syntax.\n");
@@ -453,18 +456,23 @@ static void sub(int argc, char *argv[])
         return;
     }
 
-    rc = subscribe_push_service(&server,
-                                is_fcm(argv[3]) ?
-                                fcm_subscriber_init(&fcm, argv[1], argv[2], argv[4]) :
-                                apns_subscriber_init(&apns, argv[1], argv[2], argv[4]));
+    rc = subscribe_push_service(&server, args->scope, args->ev_id, &args->suber.cookie);
     output("status: %d\n", rc);
 }
 
 static void unsub(int argc, char *argv[])
 {
-    fcm_subscriber_t fcm;
-    apns_subscriber_t apns;
     int rc;
+    struct args {
+        const char *cmd;
+        const char *scope;
+        const char *ev_id;
+        union {
+            const subscribed_cookie_t base;
+            const subscribed_project_id_t prj_id;
+            const subscribed_dev_token_t dev_token;
+        } cookie;
+    } *args = (struct args *)argv;
 
     if (argc != 5) {
         output("Invalid command syntax.\n");
@@ -476,18 +484,22 @@ static void unsub(int argc, char *argv[])
         return;
     }
 
-    rc = unsubscribe_push_service(&server,
-                                  is_fcm(argv[3]) ?
-                                  fcm_subscriber_init(&fcm, argv[1], argv[2], argv[4]) :
-                                  apns_subscriber_init(&apns, argv[1], argv[2], argv[4]));
+    rc = unsubscribe_push_service(&server, args->scope, args->ev_id, &args->cookie.base);
     output("status: %d\n", rc);
 }
 
 static void addpsp(int argc, char *argv[])
 {
-    registered_project_key_t fcm;
-    registered_certificate_t apns;
     int rc;
+    struct args {
+        const char *cmd;
+        const char *scope;
+        union {
+            const registered_data_t base;
+            const registered_project_key_t prj_key;
+            const registered_certificate_t cert;
+        } data;
+    } *args = (struct args *)argv;
 
     if (argc != 5) {
         output("Invalid command syntax.\n");
@@ -499,18 +511,22 @@ static void addpsp(int argc, char *argv[])
         return;
     }
 
-    rc = register_push_service(&server,
-                               is_fcm(argv[2]) ?
-                               registered_project_key_init(&fcm, argv[1], argv[3], argv[4]) :
-                               registered_certificate_init(&apns, argv[1], argv[3], argv[4]));
+    rc = register_push_service(&server, args->scope, &args->data.base);
     output("status: %d\n", rc);
 }
 
 static void rmpsp(int argc, char *argv[])
 {
-    registered_project_key_t fcm;
-    registered_certificate_t apns;
     int rc;
+    struct args {
+        const char *cmd;
+        const char *scope;
+        union {
+            const registered_data_t base;
+            const registered_project_key_t prj_key;
+            const registered_certificate_t cert;
+        } data;
+    } *args = (struct args *)argv;
 
     if (argc != 5) {
         output("Invalid command syntax.\n");
@@ -522,17 +538,19 @@ static void rmpsp(int argc, char *argv[])
         return;
     }
 
-    rc = unregister_push_service(&server,
-                                 is_fcm(argv[2]) ?
-                                 registered_project_key_init(&fcm, argv[1], argv[3], argv[4]) :
-                                 registered_certificate_init(&apns, argv[1], argv[3], argv[4]));
+    rc = unregister_push_service(&server, args->scope, &args->data.base);
     output("status: %d\n", rc);
 }
 
 static void push(int argc, char *argv[])
 {
-    message_t msg;
     int rc;
+    struct args {
+        const char *cmd;
+        const char *scope;
+        const char *ev_id;
+        const char *msg;
+    } *args = (struct args *)argv;
 
     if (argc != 4) {
         output("Invalid command syntax.\n");
@@ -544,7 +562,7 @@ static void push(int argc, char *argv[])
         return;
     }
 
-    rc = send_push_message(&server, message_init(&msg, argv[1], argv[2], argv[3]));
+    rc = send_push_message(&server, args->scope, args->ev_id, args->msg);
     output("status: %d\n", rc);
 }
 

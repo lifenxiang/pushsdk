@@ -24,11 +24,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include "push.h"
 #include "http_client.h"
 
-typedef struct key_value {
+typedef struct {
     const char *key;
     const char *val;
 } key_value_t;
@@ -66,80 +67,68 @@ static char *encode_x_www_form_urlencoded(http_client_t *httpc, key_value_t kvs[
     return encoded;
 }
 
+static bool registered_data_is_valid(const registered_data_t *data)
+{
+    assert(data);
+
+    union {
+        registered_data_t *base;
+        registered_project_key_t *project_key;
+        registered_certificate_t *certificate;
+    } __data = {
+        .base = data
+    };
+
+    if (!strcmp(__data.base->service_type, "fcm"))
+        return __data.project_key->api_key && *__data.project_key->api_key &&
+               __data.project_key->project_id && *__data.project_key->project_id;
+    else if (!strcmp(__data.base->service_type, "apns"))
+        return __data.certificate->certificate_path && *__data.certificate->certificate_path &&
+               __data.certificate->private_key_path && *__data.certificate->private_key_path;
+    else
+        return false;
+}
+
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
-static char *encode_project_key_to_x_www_form_urlencoded(const registered_data_t *data,
-                                                         http_client_t *httpc, int *len)
+static char *encode_register_push_service_body(http_client_t *httpc, const char *scope,
+                                               const registered_data_t *data, int *len)
 {
-    const registered_project_key_t *key = (const registered_project_key_t *)data;
-
-    assert(data);
     assert(httpc);
+    assert(scope);
+    assert(data);
     assert(len);
 
-    key_value_t kvs[] = {
-        {.key = "service"        , .val = key->base.scope},
-        {.key = "pushservicetype", .val = "fcm"          },
-        {.key = "projectid"      , .val = key->project_id},
-        {.key = "apikey"         , .val = key->api_key   }
+    union {
+        registered_data_t *base;
+        registered_project_key_t *project_key;
+        registered_certificate_t *certificate;
+    } __data = {
+        .base = data
     };
 
-    return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-}
-
-const registered_data_t *registered_project_key_init(registered_project_key_t *data,
-                                                     const char *scope,
-                                                     const char *project_id,
-                                                     const char *api_key)
-{
-    if (!data || !scope || !*scope || !project_id || !*project_id || !api_key || !*api_key)
-        return NULL;
-
-    data->base.encode_to_x_www_form_urlencoded = encode_project_key_to_x_www_form_urlencoded;
-    data->base.scope                           = scope;
-    data->project_id                           = project_id;
-    data->api_key                              = api_key;
-
-    return &data->base;
-}
-
-static char *encode_certificate_to_x_www_form_urlencoded(const registered_data_t *data,
-                                                         http_client_t *httpc, int *len)
-{
-    const registered_certificate_t *cert = (const registered_certificate_t *)data;
-
-    assert(data);
-    assert(httpc);
-    assert(len);
-
-    key_value_t kvs[] = {
-        {.key = "service"        , .val = cert->base.scope      },
-        {.key = "pushservicetype", .val = "apns"                },
-        {.key = "cert"           , .val = cert->certificate_path},
-        {.key = "key"            , .val = cert->private_key_path},
-        {.key = "sandbox"        , .val = "true"                }
-    };
-
-    return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-}
-
-const registered_data_t *registered_certificate_init(registered_certificate_t *data,
-                                                     const char *scope,
-                                                     const char *certificate_path,
-                                                     const char *private_key_path)
-{
-    if (!data || !scope || !*scope || !certificate_path || !*certificate_path ||
-        !private_key_path || !*private_key_path)
-        return NULL;
-
-    data->base.encode_to_x_www_form_urlencoded = encode_certificate_to_x_www_form_urlencoded;
-    data->base.scope                           = scope;
-    data->certificate_path                     = certificate_path;
-    data->private_key_path                     = private_key_path;
-
-    return &data->base;
+    if (!strcmp(__data.base->service_type, "fcm")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                               },
+            {.key = "pushservicetype", .val = "fcm"                               },
+            {.key = "projectid"      , .val = __data.project_key->project_id      },
+            {.key = "apikey"         , .val = __data.project_key->api_key         }
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else if (!strcmp(__data.base->service_type, "apns")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                               },
+            {.key = "pushservicetype", .val = "apns"                              },
+            {.key = "cert"           , .val = __data.certificate->certificate_path},
+            {.key = "key"            , .val = __data.certificate->private_key_path},
+            {.key = "sandbox"        , .val = "true"                              }
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else
+        assert(0);
 }
 
 int register_push_service(const push_server_t *push_server,
+                          const char *scope,
                           const registered_data_t *data)
 {
     http_client_t *http_client;
@@ -149,14 +138,15 @@ int register_push_service(const push_server_t *push_server,
     int rc;
 
     if (!push_server || !push_server->host || !*push_server->host ||
-        !push_server->port || !*push_server->port || !data)
+        !push_server->port || !*push_server->port || !scope || !*scope ||
+        !data || !registered_data_is_valid(data))
         return -1;
 
     http_client = http_client_new();
     if (!http_client)
         return -1;
 
-    body = data->encode_to_x_www_form_urlencoded(data, http_client, &body_len);
+    body = encode_register_push_service_body(http_client, scope, data, &body_len);
     if (!body) {
         http_client_close(http_client);
         return -1;
@@ -190,7 +180,44 @@ int register_push_service(const push_server_t *push_server,
     return (int)resp_stat;
 }
 
+static char *encode_unregister_push_service_body(http_client_t *httpc, const char *scope,
+                                               const registered_data_t *data, int *len)
+{
+    assert(httpc);
+    assert(scope);
+    assert(data);
+    assert(len);
+
+    union {
+        registered_data_t *base;
+        registered_project_key_t *project_key;
+        registered_certificate_t *certificate;
+    } __data = {
+        .base = data
+    };
+
+    if (!strcmp(__data.base->service_type, "fcm")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                               },
+            {.key = "pushservicetype", .val = "fcm"                               },
+            {.key = "projectid"      , .val = __data.project_key->project_id      },
+            {.key = "apikey"         , .val = __data.project_key->api_key         }
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else if (!strcmp(__data.base->service_type, "apns")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                               },
+            {.key = "pushservicetype", .val = "apns"                              },
+            {.key = "cert"           , .val = __data.certificate->certificate_path},
+            {.key = "key"            , .val = __data.certificate->private_key_path},
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else
+        assert(0);
+}
+
 int unregister_push_service(const push_server_t *push_server,
+                            const char *scope,
                             const registered_data_t *data)
 {
     http_client_t *http_client;
@@ -200,14 +227,14 @@ int unregister_push_service(const push_server_t *push_server,
     int rc;
 
     if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
-        !*push_server->port || !data)
+        !*push_server->port || !scope || !*scope || !data || !registered_data_is_valid(data))
         return -1;
 
     http_client = http_client_new();
     if (!http_client)
         return -1;
 
-    body = data->encode_to_x_www_form_urlencoded(data, http_client, &body_len);
+    body = encode_unregister_push_service_body(http_client, scope, data, &body_len);
     if (!body) {
         http_client_close(http_client);
         return -1;
@@ -241,78 +268,67 @@ int unregister_push_service(const push_server_t *push_server,
     return (int)resp_stat;
 }
 
-static char *encode_fcm_subscriber_to_x_www_form_urlencoded(const subscriber_t *subscriber,
-                                                            http_client_t *httpc, int *len)
+static bool subscribed_cookie_is_valid(const subscribed_cookie_t *cookie)
 {
-    const fcm_subscriber_t *fcm = (const fcm_subscriber_t *)subscriber;
+    assert(cookie);
 
-    assert(subscriber);
-    assert(httpc);
-    assert(len);
-
-    key_value_t kvs[] = {
-        {.key = "service"        , .val = fcm->base.scope   },
-        {.key = "subscriber"     , .val = fcm->base.event_id},
-        {.key = "pushservicetype", .val = "fcm"             },
-        {.key = "regid"          , .val = fcm->register_id  }
+    union {
+        const subscribed_cookie_t *base;
+        const subscribed_project_id_t *project_id;
+        const subscribed_dev_token_t *dev_token;
+    } __cookie = {
+        .base = cookie
     };
 
-    return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    if (!strcmp(__cookie.base->service_type, "fcm"))
+        return __cookie.project_id->register_id && *__cookie.project_id->register_id;
+    else if (!strcmp(__cookie.base->service_type, "apns"))
+        return __cookie.dev_token->dev_token && *__cookie.dev_token->dev_token;
+    else
+        return false;
 }
 
-const subscriber_t *fcm_subscriber_init(fcm_subscriber_t *subscriber,
-                                        const char *scope,
-                                        const char *event_id,
-                                        const char *register_id)
+static char *encode_subscribe_push_service_body(http_client_t *httpc, const char *scope,
+                                                const char *event_id,
+                                                const subscribed_cookie_t *cookie, int *len)
 {
-    if (!subscriber || !scope || !*scope || !event_id || !*event_id || !register_id || !*register_id)
-        return NULL;
-
-    subscriber->base.encode_to_x_www_form_urlencoded = encode_fcm_subscriber_to_x_www_form_urlencoded;
-    subscriber->base.scope                           = scope;
-    subscriber->base.event_id                        = event_id;
-    subscriber->register_id                          = register_id;
-
-    return &subscriber->base;
-}
-
-static char *encode_apns_subscriber_to_x_www_form_urlencoded(const subscriber_t *subscriber,
-                                                            http_client_t *httpc, int *len)
-{
-    const apns_subscriber_t *apns = (const apns_subscriber_t *)subscriber;
-
-    assert(subscriber);
     assert(httpc);
-    assert(len);
+    assert(scope);
+    assert(event_id);
+    assert(cookie);
 
-    key_value_t kvs[] = {
-        {.key = "service"        , .val = apns->base.scope   },
-        {.key = "subscriber"     , .val = apns->base.event_id},
-        {.key = "pushservicetype", .val = "apns"             },
-        {.key = "devtoken"       , .val = apns->device_token }
+    union {
+        const subscribed_cookie_t *base;
+        const subscribed_project_id_t *project_id;
+        const subscribed_dev_token_t *dev_token;
+    } __cookie = {
+        .base = cookie
     };
 
-    return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-}
-
-const subscriber_t *apns_subscriber_init(apns_subscriber_t *subscriber,
-                                         const char *scope,
-                                         const char *event_id,
-                                         const char *device_token)
-{
-    if (!subscriber || !scope || !*scope || !event_id || !*event_id || !device_token || !*device_token)
-        return NULL;
-
-    subscriber->base.encode_to_x_www_form_urlencoded = encode_apns_subscriber_to_x_www_form_urlencoded;
-    subscriber->base.scope                           = scope;
-    subscriber->base.event_id                        = event_id;
-    subscriber->device_token                         = device_token;
-
-    return &subscriber->base;
+    if (!strcmp(__cookie.base->service_type, "fcm")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                           },
+            {.key = "subscriber"     , .val = event_id                        },
+            {.key = "pushservicetype", .val = "fcm"                           },
+            {.key = "regid"          , .val = __cookie.project_id->register_id}
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else if (!strcmp(__cookie.base->service_type, "apns")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                           },
+            {.key = "subscriber"     , .val = event_id                        },
+            {.key = "pushservicetype", .val = "apns"                          },
+            {.key = "devtoken"       , .val = __cookie.dev_token->dev_token   }
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else
+        assert(0);
 }
 
 int subscribe_push_service(const push_server_t *push_server,
-                           const subscriber_t *subscriber)
+                           const char *scope,
+                           const char *event_id,
+                           const subscribed_cookie_t *cookie)
 {
     http_client_t *http_client;
     long resp_stat;
@@ -321,14 +337,15 @@ int subscribe_push_service(const push_server_t *push_server,
     int rc;
 
     if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
-        !*push_server->port || !subscriber)
+        !*push_server->port || !scope || !*scope || !event_id || !*event_id || !cookie ||
+        !subscribed_cookie_is_valid(cookie))
         return -1;
 
     http_client = http_client_new();
     if (!http_client)
         return -1;
 
-    body = subscriber->encode_to_x_www_form_urlencoded(subscriber, http_client, &body_len);
+    body = encode_subscribe_push_service_body(http_client, scope, event_id, cookie, &body_len);
     if (!body) {
         http_client_close(http_client);
         return -1;
@@ -362,8 +379,47 @@ int subscribe_push_service(const push_server_t *push_server,
     return (int)resp_stat;
 }
 
+static char *encode_unsubscribe_push_service_body(http_client_t *httpc, const char *scope,
+                                                const char *event_id,
+                                                const subscribed_cookie_t *cookie, int *len)
+{
+    assert(httpc);
+    assert(scope);
+    assert(event_id);
+    assert(cookie);
+
+    union {
+        const subscribed_cookie_t *base;
+        const subscribed_project_id_t *project_id;
+        const subscribed_dev_token_t *dev_token;
+    } __cookie = {
+        .base = cookie
+    };
+
+    if (!strcmp(__cookie.base->service_type, "fcm")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                           },
+            {.key = "subscriber"     , .val = event_id                        },
+            {.key = "pushservicetype", .val = "fcm"                           },
+            {.key = "regid"          , .val = __cookie.project_id->register_id}
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else if (!strcmp(__cookie.base->service_type, "apns")) {
+        key_value_t kvs[] = {
+            {.key = "service"        , .val = scope                           },
+            {.key = "subscriber"     , .val = event_id                        },
+            {.key = "pushservicetype", .val = "apns"                          },
+            {.key = "devtoken"       , .val = __cookie.dev_token->dev_token   }
+        };
+        return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
+    } else
+        assert(0);
+}
+
 int unsubscribe_push_service(const push_server_t *push_server,
-                             const subscriber_t *subscriber)
+                             const char *scope,
+                             const char *event_id,
+                             const subscribed_cookie_t *cookie)
 {
     http_client_t *http_client;
     long resp_stat;
@@ -372,14 +428,15 @@ int unsubscribe_push_service(const push_server_t *push_server,
     int rc;
 
     if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
-        !*push_server->port || !subscriber)
+        !*push_server->port || !scope || !*scope || !event_id || !*event_id || !cookie ||
+        !subscribed_cookie_is_valid(cookie))
         return -1;
 
     http_client = http_client_new();
     if (!http_client)
         return -1;
 
-    body = subscriber->encode_to_x_www_form_urlencoded(subscriber, http_client, &body_len);
+    body = encode_unsubscribe_push_service_body(http_client, scope, event_id, cookie, &body_len);
     if (!body) {
         http_client_close(http_client);
         return -1;
@@ -413,38 +470,26 @@ int unsubscribe_push_service(const push_server_t *push_server,
     return (int)resp_stat;
 }
 
-static char *encode_message_to_x_www_form_urlencoded(const message_t *message,
-                                                     http_client_t *httpc, int *len)
+static char *encode_send_push_message_body(http_client_t *httpc, const char *scope,
+                                           const char *event_id, const char *message, int *len)
 {
-    assert(message);
     assert(httpc);
+    assert(scope);
+    assert(event_id);
+    assert(message);
     assert(len);
 
     key_value_t kvs[] = {
-        {.key = "service"   , .val = message->scope   },
-        {.key = "subscriber", .val = message->event_id},
-        {.key = "msg"       , .val = message->message }
+        {.key = "service"   , .val = scope   },
+        {.key = "subscriber", .val = event_id},
+        {.key = "msg"       , .val = message }
     };
 
     return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
 }
 
-const message_t *message_init(message_t *message, const char *scope,
-                              const char *event_id, const char *content)
-{
-    if (!message || !scope || !*scope || !event_id || !*event_id || !content || !*content)
-        return NULL;
-
-    message->scope                           = scope;
-    message->event_id                        = event_id;
-    message->message                         = content;
-    message->encode_to_x_www_form_urlencoded = encode_message_to_x_www_form_urlencoded;
-
-    return message;
-}
-
-int send_push_message(const push_server_t *push_server,
-                      const message_t *message)
+int send_push_message(const push_server_t *push_server, const char *scope,
+                      const char *event_id, const char *message)
 {
     http_client_t *http_client;
     long resp_stat;
@@ -453,14 +498,14 @@ int send_push_message(const push_server_t *push_server,
     int rc;
 
     if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
-        !*push_server->port || !message)
+        !*push_server->port || !scope || !*scope || !event_id || !*event_id || !message || !*message)
         return -1;
 
     http_client = http_client_new();
     if (!http_client)
         return -1;
 
-    body = message->encode_to_x_www_form_urlencoded(message, http_client, &body_len);
+    body = encode_send_push_message_body(http_client, scope, event_id, message, &body_len);
     if (!body) {
         http_client_close(http_client);
         return -1;

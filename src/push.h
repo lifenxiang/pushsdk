@@ -49,21 +49,23 @@ extern "C" {
   #define CARRIER_API
 #endif
 
-#ifdef CARRIER_BUILD
-    #include "push_opaque.h"
-#else
-    #include <push_opaque.h>
-#endif
+typedef struct registered_data {
+    const char *service_type; // "fcm" or "apns"
+} registered_data_t;
 
-typedef struct registered_data registered_data_t;
-typedef struct registered_project_key registered_project_key_t;
-typedef struct registered_certificate registered_certificate_t;
+// registered project id and key on Google Firebase with service type "fcm"
+typedef struct registered_project_key {
+    const char *service_type; // assigned value with "fcm";
+    const char *project_id;
+    const char *api_key;
+} registered_project_key_t;
 
-typedef struct subscriber subscriber_t;
-typedef struct fcm_subscriber fcm_subscriber_t;
-typedef struct apns_subscriber apns_subscriber_t;
-
-typedef struct message message_t;
+// registered certificate and private key on Apple APNs with service type "apns"
+typedef struct registered_certificate {
+    const char *service_type; // assigned value with "apns";
+    const char *certificate_path;
+    const char *private_key_path;
+} registered_certificate_t;
 
 typedef struct push_server {
     char *host;
@@ -71,53 +73,49 @@ typedef struct push_server {
 } push_server_t;
 
 CARRIER_API
-const registered_data_t *registered_project_key_init(registered_project_key_t *data,
-                                                     const char *scope,
-                                                     const char *project_id,
-                                                     const char *api_key);
-
-CARRIER_API
-const registered_data_t *registered_certificate_init(registered_certificate_t *data,
-                                                     const char *scope,
-                                                     const char *certificate_path,
-                                                     const char *private_key_path);
-
-CARRIER_API
 int register_push_service(const push_server_t *push_server,
+                          const char *scope,
                           const registered_data_t *data);
 
 CARRIER_API
 int unregister_push_service(const push_server_t *push_server,
+                            const char *scope,
                             const registered_data_t *data);
 
-CARRIER_API
-const subscriber_t *fcm_subscriber_init(fcm_subscriber_t *subscriber,
-                                        const char *scope,
-                                        const char *event_id,
-                                        const char *register_id);
+typedef struct subscribed_cookie {
+    const char *service_type;
+} subscribed_cookie_t;
 
-CARRIER_API
-const subscriber_t *apns_subscriber_init(apns_subscriber_t *subscriber,
-                                         const char *scope,
-                                         const char *event_id,
-                                         const char *device_token);
+typedef struct subscribed_project_id {
+    const char *service_type;
+    const char *register_id;
+} subscribed_project_id_t;
+
+typedef struct subscribed_devtoken {
+    const char *service_type;
+    const char *dev_token;
+} subscribed_dev_token_t;
 
 CARRIER_API
 int subscribe_push_service(const push_server_t *push_server,
-                           const subscriber_t *subscriber);
+                           const char *scope,
+                           const char *event_id,
+                           const subscribed_cookie_t *cookie);
+
+// device_cookie:
+//    ios: device token;
+//    android: register id;
 CARRIER_API
 int unsubscribe_push_service(const push_server_t *push_server,
-                             const subscriber_t *subscriber);
-
-CARRIER_API
-const message_t *message_init(message_t *message,
-                              const char *scope,
-                              const char *event_id,
-                              const char *content);
+                             const char *scope,
+                             const char *event_id,
+                             const subscribed_cookie_t *cookie);
 
 CARRIER_API
 int send_push_message(const push_server_t *push_server,
-                      const message_t *message);
+                      const char *scope,
+                      const char *event_id,
+                      const char *message);
 
 #ifdef __cplusplus
 }

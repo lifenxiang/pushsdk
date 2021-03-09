@@ -44,35 +44,22 @@ static void usage(void)
     printf("\n");
 }
 
-typedef struct {
-    char *op;
-    push_server_t server;
-    char *scope;
-    char *psp;
-    union {
-        struct {
-            char *prj_id;
-            char *api_key;
-        } fcm;
-        struct {
-            char *cert_path;
-            char *key_path;
-        } apns;
-    } psp_specific;
-} args_t;
-
 #define NON_OPT_CNT (7)
 int main(int argc, char *argv[])
 {
     int wait_for_attach = 0;
     int rc;
-    int (*op)(const push_server_t *, const registered_data_t *);
-    const args_t *args;
-    union {
-        registered_data_t data;
-        registered_project_key_t fcm;
-        registered_certificate_t apns;
-    } psp;
+    int (*op)(const push_server_t *, const char *, const registered_data_t *);
+    const struct args {
+        char *op;
+        push_server_t server;
+        char *scope;
+        union {
+            const registered_data_t base;
+            const registered_project_key_t prj_key;
+            const registered_certificate_t cert;
+        } data;
+    } *args;
 
     int opt;
     int idx;
@@ -111,16 +98,10 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    args = (args_t *)(argv + optind);
+    args = (struct args *)(argv + optind);
     op = !strcmp(args->op, "register") ? register_push_service : unregister_push_service;
-    !strcmp(args->psp, "fcm") ? registered_project_key_init(&psp.fcm, args->scope,
-                                                            args->psp_specific.fcm.prj_id,
-                                                            args->psp_specific.fcm.api_key) :
-                                registered_certificate_init(&psp.apns, args->scope,
-                                                            args->psp_specific.apns.cert_path,
-                                                            args->psp_specific.apns.key_path);
 
-    rc = op(&args->server, &psp.data);
+    rc = op(&args->server, args->scope, &args->data.base);
     printf("status: %d\n", rc);
 
     return 0;
