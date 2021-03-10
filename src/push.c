@@ -26,6 +26,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include <cjson/cJSON.h>
+
 #include "push.h"
 #include "http_client.h"
 
@@ -72,9 +74,9 @@ static bool registered_data_is_valid(const registered_data_t *data)
     assert(data);
 
     union {
-        registered_data_t *base;
-        registered_project_key_t *project_key;
-        registered_certificate_t *certificate;
+        const registered_data_t *base;
+        const registered_project_key_t *project_key;
+        const registered_certificate_t *certificate;
     } __data = {
         .base = data
     };
@@ -99,9 +101,9 @@ static char *encode_register_push_service_body(http_client_t *httpc, const char 
     assert(len);
 
     union {
-        registered_data_t *base;
-        registered_project_key_t *project_key;
-        registered_certificate_t *certificate;
+        const registered_data_t *base;
+        const registered_project_key_t *project_key;
+        const registered_certificate_t *certificate;
     } __data = {
         .base = data
     };
@@ -189,9 +191,9 @@ static char *encode_unregister_push_service_body(http_client_t *httpc, const cha
     assert(len);
 
     union {
-        registered_data_t *base;
-        registered_project_key_t *project_key;
-        registered_certificate_t *certificate;
+        const registered_data_t *base;
+        const registered_project_key_t *project_key;
+        const registered_certificate_t *certificate;
     } __data = {
         .base = data
     };
@@ -266,6 +268,234 @@ int unregister_push_service(const push_server_t *push_server,
         return -1;
 
     return (int)resp_stat;
+}
+
+typedef struct scopes {
+    cJSON *json;
+    int size;
+    scope_registered_datas_t scopes[];
+} scopes_t;
+
+static void deinit_scope_registered_datas(scope_registered_datas_t *datas)
+{
+    assert(datas);
+
+    if (!datas->datas)
+        return;
+
+    if (datas->datas[0])
+        free((void *)datas->datas[0]);
+
+    free(datas->datas);
+}
+
+static int decode_registered_data(registered_data_t *data, const cJSON *json)
+{
+    assert(data);
+    assert(json);
+
+    union {
+        registered_data_t *base;
+        registered_project_key_t *prj_key;
+        registered_certificate_t *cert;
+    } __data = {
+        .base = data
+    };
+    const cJSON *api_key = cJSON_GetObjectItemCaseSensitive(json, "apikey");
+    const cJSON *cert    = cJSON_GetObjectItemCaseSensitive(json, "cert");
+    const cJSON *key     = cJSON_GetObjectItemCaseSensitive(json, "key");
+
+    if (!((api_key && cJSON_IsString(api_key) && *api_key->valuestring && !cert && !key) ||
+          (!api_key && cert && cJSON_IsString(cert) && *cert->valuestring &&
+           key && cJSON_IsString(key) && *key->valuestring)))
+        return -1;
+
+    if (api_key) {
+        __data.prj_key->service_type  = "fcm";
+        __data.prj_key->api_key       = api_key->valuestring;
+        __data.prj_key->project_id    = NULL;
+    } else {
+        __data.cert->service_type     = "apns";
+        __data.cert->certificate_path = cert->valuestring;
+        __data.cert->private_key_path = key->valuestring;
+    }
+
+    return 0;
+}
+
+static int decode_scope_registered_datas(scope_registered_datas_t *datas, const cJSON *json)
+{
+    assert(datas);
+    assert(json);
+
+    union {
+        registered_data_t base;
+        registered_project_key_t prj_key;
+        registered_certificate_t cert;
+    } *data_array;
+    cJSON *data_json;
+    int i;
+
+    if (!cJSON_IsArray(json) || !cJSON_GetArraySize(json))
+        return -1;
+
+    datas->scope = json->string;
+    datas->size  = cJSON_GetArraySize(json);
+    datas->datas = calloc(datas->size, sizeof(datas->scope[0]));
+
+    if (!datas->datas)
+        return -1;
+
+    data_array = calloc(datas->size, sizeof(data_array[0]));
+    if (!data_array) {
+        deinit_scope_registered_datas(datas);
+        return -1;
+    }
+
+    for (i = 0; i < datas->size; ++i)
+        datas->datas[i] = &data_array[i].base;
+
+    i = 0;
+    cJSON_ArrayForEach(data_json, json) {
+        if (!cJSON_IsObject(data_json) ||
+            decode_registered_data(&data_array[i++].base, data_json)) {
+            deinit_scope_registered_datas(datas);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static void free_scopes(scopes_t *scopes)
+{
+    assert(scopes);
+
+    int i;
+
+    if (scopes->json)
+        cJSON_free(scopes->json);
+
+    for (i = 0; i < scopes->size; ++i)
+        deinit_scope_registered_datas(scopes->scopes + i);
+
+    free(scopes);
+}
+
+static scopes_t *decode_list_registered_push_services_response_body(const char *body, int body_len)
+{
+    assert(body);
+    assert(body_len);
+
+    cJSON *json;
+    cJSON *scopes_json;
+    cJSON *scope_json;
+    scopes_t *scopes;
+    int i;
+
+    json = cJSON_ParseWithLength(body, body_len);
+    if (!json)
+        return NULL;
+
+    scopes_json = cJSON_GetObjectItemCaseSensitive(json, "services");
+    if (!scopes_json || !cJSON_IsObject(scopes_json)) {
+        cJSON_free(json);
+        return NULL;
+    }
+
+    scopes = calloc(1, sizeof(*scopes) + sizeof(scopes->scopes[0]) * cJSON_GetArraySize(scopes_json));
+    if (!scopes) {
+        cJSON_free(json);
+        return NULL;
+    }
+
+    scopes->json = json;
+    scopes->size = cJSON_GetArraySize(scopes_json);
+
+    i = 0;
+    cJSON_ArrayForEach(scope_json, scopes_json) {
+        if (decode_scope_registered_datas(scopes->scopes + i++, scope_json)) {
+            free_scopes(scopes);
+            return NULL;
+        }
+    }
+
+    return scopes;
+}
+
+int list_registered_push_services(const push_server_t *push_server,
+                                  scope_registered_datas_t **scopes, int *size)
+{
+    http_client_t *http_client;
+    long resp_stat;
+    const char *body;
+    scopes_t *__scopes;
+    int body_len;
+    int rc;
+
+    if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
+        !*push_server->port || !scopes || !size)
+        return -1;
+
+    http_client = http_client_new();
+    if (!http_client)
+        return -1;
+
+    if (http_client_set_method(http_client, HTTP_METHOD_POST) ||
+        http_client_set_scheme(http_client, "http") ||
+        http_client_set_host(http_client, push_server->host) ||
+        http_client_set_port(http_client, push_server->port) ||
+        http_client_set_path(http_client, "/psps") ||
+        http_client_set_request_body_instant(http_client, NULL, 0) ||
+        http_client_enable_response_body(http_client)) {
+        http_client_close(http_client);
+        return -1;
+    }
+
+    rc = http_client_request(http_client);
+    if (rc) {
+        http_client_close(http_client);
+        return -1;
+    }
+
+    rc = http_client_get_response_code(http_client, &resp_stat);
+    if (rc) {
+        http_client_close(http_client);
+        return -1;
+    }
+
+    if (resp_stat != 200) {
+        http_client_close(http_client);
+        return (int)resp_stat;
+    }
+
+    body = http_client_get_response_body(http_client);
+    body_len = http_client_get_response_body_length(http_client);
+    if (!body || !body_len) {
+        http_client_close(http_client);
+        return -1;
+    }
+
+    __scopes = decode_list_registered_push_services_response_body(body, body_len);
+    http_client_close(http_client);
+    if (!__scopes)
+        return -1;
+
+    *scopes = __scopes->scopes;
+    *size   = __scopes->size;
+
+    return 200;
+}
+
+void list_registered_push_services_free_scopes(scope_registered_datas_t *scopes)
+{
+    scopes_t *__scopes;
+
+    if (!scopes)
+        return;
+
+    __scopes = (scopes_t *)((char *)scopes - offsetof(scopes_t, scopes));
+    free_scopes(__scopes);
 }
 
 static bool subscribed_cookie_is_valid(const subscribed_cookie_t *cookie)

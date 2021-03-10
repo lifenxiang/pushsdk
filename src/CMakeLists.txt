@@ -28,7 +28,8 @@ if(WIN32)
 endif()
 
 set(LIBS
-    libcurl)
+    libcurl
+    cjson)
 
 add_definitions(-DCARRIER_BUILD)
 
@@ -36,7 +37,7 @@ add_custom_target(push0)
 
 if(ENABLE_STATIC)
     add_library(push-static STATIC ${SRC})
-    add_dependencies(push-static curl)
+    add_dependencies(push-static curl cJSON)
 
     target_compile_definitions(push-static PRIVATE CARRIER_STATIC)
     set_target_properties(push-static PROPERTIES OUTPUT_NAME push)
@@ -51,7 +52,7 @@ endif()
 
 if(ENABLE_SHARED)
     add_library(push-shared SHARED ${SRC})
-    add_dependencies(push-shared curl)
+    add_dependencies(push-shared curl cJSON)
 
     target_compile_definitions(push-shared PRIVATE CARRIER_DYNAMIC)
     set_target_properties(push-shared PROPERTIES OUTPUT_NAME push)

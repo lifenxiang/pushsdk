@@ -36,31 +36,79 @@
 static void usage(void)
 {
     printf("Push Tool, an CLI tool to simplify push server configuration.\n");
-    printf("Usage: pushtool [OPTION] register|unregister SERVER_HOST SERVER_PORT SCOPE fcm|apns "
-           "PROJECT_ID|CERT_PATH API_KEY|KEY_PATH\n");
+    printf("Usage:\n"
+           "  pushtool [OPTION] register | unregister SERVER_HOST SERVER_PORT SCOPE fcm | apns "
+           "PROJECT_ID | CERT_PATH API_KEY | KEY_PATH\n"
+           "  pushtool [OPTION] list SERVER_HOST SERVER_PORT\n");
     printf("\n");
     printf("Debugging options:\n");
     printf("      --debug               Wait for debugger attach after start.\n");
     printf("\n");
 }
 
-#define NON_OPT_CNT (7)
+#define INDENT_FMT "%*s"
+#define INDENT_ARG(lv) ((lv) << 1), ""
+static void output_data(const registered_data_t *data, int indent_lv)
+{
+    union {
+        const registered_data_t *base;
+        const registered_project_key_t *prj_key;
+        const registered_certificate_t *cert;
+    } __data = {
+        .base = data
+    };
+
+    printf("{\n");
+    if (!strcmp(__data.base->service_type, "fcm")) {
+        printf(INDENT_FMT "type: fcm,\n", INDENT_ARG(indent_lv + 1));
+        printf(INDENT_FMT "apikey: %s\n", INDENT_ARG(indent_lv + 1), __data.prj_key->api_key);
+    } else {
+        printf(INDENT_FMT "type: apns,\n", INDENT_ARG(indent_lv + 1));
+        printf(INDENT_FMT "cert: %s,\n", INDENT_ARG(indent_lv + 1), __data.cert->certificate_path);
+        printf(INDENT_FMT "key: %s\n", INDENT_ARG(indent_lv + 1), __data.cert->private_key_path);
+    }
+    printf(INDENT_FMT "}", INDENT_ARG(indent_lv));
+}
+
+static void output_datas(const registered_data_t **datas, int sz, int indent_lv)
+{
+    int i;
+
+    printf("[\n");
+    for (i = 0; i < sz; ++i) {
+        printf(INDENT_FMT, INDENT_ARG(indent_lv + 1));
+        output_data(datas[i], indent_lv + 1);
+        printf(i == sz - 1 ? "\n" : ",\n");
+    }
+    printf(INDENT_FMT "]", INDENT_ARG(indent_lv));
+}
+
+static void output_scope(const scope_registered_datas_t *scope, int indent_lv)
+{
+    printf("{\n");
+    printf(INDENT_FMT "scope: %s,\n", INDENT_ARG(indent_lv + 1), scope->scope);
+    printf(INDENT_FMT "datas: ", INDENT_ARG(indent_lv + 1));
+    output_datas(scope->datas, scope->size, indent_lv + 1);
+    printf("\n" INDENT_FMT "}", INDENT_ARG(indent_lv));
+}
+
+static void output_scopes(const scope_registered_datas_t *scopes, int sz)
+{
+    int i;
+
+    printf("[\n");
+    for (i = 0; i < sz; ++i) {
+        printf(INDENT_FMT, INDENT_ARG(1));
+        output_scope(scopes + i, 1);
+        printf(i == sz - 1 ? "\n" : ",\n");
+    }
+    printf("]\n");
+}
+
 int main(int argc, char *argv[])
 {
     int wait_for_attach = 0;
     int rc;
-    int (*op)(const push_server_t *, const char *, const registered_data_t *);
-    const struct args {
-        char *op;
-        push_server_t server;
-        char *scope;
-        union {
-            const registered_data_t base;
-            const registered_project_key_t prj_key;
-            const registered_certificate_t cert;
-        } data;
-    } *args;
-
     int opt;
     int idx;
     struct option options[] = {
@@ -93,16 +141,46 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    if (argc - optind != NON_OPT_CNT) {
+    if (argc - optind != 7 && argc - optind != 3) {
         printf("Arguments counts are not correct.");
         return -1;
     }
 
-    args = (struct args *)(argv + optind);
-    op = !strcmp(args->op, "register") ? register_push_service : unregister_push_service;
+    if (argc - optind == 7) {
+        int (*op)(const push_server_t *, const char *, const registered_data_t *);
+        const struct args {
+            char *op;
+            push_server_t server;
+            char *scope;
+            union {
+                const registered_data_t base;
+                const registered_project_key_t prj_key;
+                const registered_certificate_t cert;
+            } data;
+        } *args;
 
-    rc = op(&args->server, args->scope, &args->data.base);
-    printf("status: %d\n", rc);
+        args = (struct args *)(argv + optind);
+        op = !strcmp(args->op, "register") ? register_push_service : unregister_push_service;
+
+        rc = op(&args->server, args->scope, &args->data.base);
+        printf("status: %d\n", rc);
+    } else {
+        const struct args {
+            char *op;
+            push_server_t server;
+        } *args;
+        scope_registered_datas_t *scopes;
+        int size;
+
+        args = (struct args *)(argv + optind);
+        rc = list_registered_push_services(&args->server, &scopes, &size);
+        printf("status: %d\n", rc);
+
+        if (rc == 200) {
+            output_scopes(scopes, size);
+            list_registered_push_services_free_scopes(scopes);
+        }
+    }
 
     return 0;
 }

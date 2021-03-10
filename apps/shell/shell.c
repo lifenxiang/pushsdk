@@ -566,6 +566,94 @@ static void push(int argc, char *argv[])
     output("status: %d\n", rc);
 }
 
+#define INDENT_FMT "%*s"
+#define INDENT_ARG(lv) ((lv) << 1), ""
+static void output_data(const registered_data_t *data, int indent_lv)
+{
+    union {
+        const registered_data_t *base;
+        const registered_project_key_t *prj_key;
+        const registered_certificate_t *cert;
+    } __data = {
+        .base = data
+    };
+
+    output("{\n");
+    if (!strcmp(__data.base->service_type, "fcm")) {
+        output(INDENT_FMT "type: fcm,\n", INDENT_ARG(indent_lv + 1));
+        output(INDENT_FMT "apikey: %s\n", INDENT_ARG(indent_lv + 1), __data.prj_key->api_key);
+    } else {
+        output(INDENT_FMT "type: apns,\n", INDENT_ARG(indent_lv + 1));
+        output(INDENT_FMT "cert: %s,\n", INDENT_ARG(indent_lv + 1), __data.cert->certificate_path);
+        output(INDENT_FMT "key: %s\n", INDENT_ARG(indent_lv + 1), __data.cert->private_key_path);
+    }
+    output(INDENT_FMT "}", INDENT_ARG(indent_lv));
+}
+
+static void output_datas(const registered_data_t **datas, int sz, int indent_lv)
+{
+    int i;
+
+    output("[\n");
+    for (i = 0; i < sz; ++i) {
+        output(INDENT_FMT, INDENT_ARG(indent_lv + 1));
+        output_data(datas[i], indent_lv + 1);
+        output(i == sz - 1 ? "\n" : ",\n");
+    }
+    output(INDENT_FMT "]", INDENT_ARG(indent_lv));
+}
+
+static void output_scope(const scope_registered_datas_t *scope, int indent_lv)
+{
+    output("{\n");
+    output(INDENT_FMT "scope: %s,\n", INDENT_ARG(indent_lv + 1), scope->scope);
+    output(INDENT_FMT "datas: ", INDENT_ARG(indent_lv + 1));
+    output_datas(scope->datas, scope->size, indent_lv + 1);
+    output("\n" INDENT_FMT "}", INDENT_ARG(indent_lv));
+}
+
+static void output_scopes(const scope_registered_datas_t *scopes, int sz)
+{
+    int i;
+
+    output("[\n");
+    for (i = 0; i < sz; ++i) {
+        output(INDENT_FMT, INDENT_ARG(1));
+        output_scope(scopes + i, 1);
+        output(i == sz - 1 ? "\n" : ",\n");
+    }
+    output("]\n");
+}
+
+static void list(int argc, char *argv[])
+{
+    int rc;
+    struct args {
+        const char *cmd;
+    } *args = (struct args *)argv;
+    scope_registered_datas_t *scopes;
+    int sz;
+
+    if (argc != 1) {
+        output("Invalid command syntax.\n");
+        return;
+    }
+
+    if (!svr_isset) {
+        output("Push server is not set.\n");
+        return;
+    }
+
+    rc = list_registered_push_services(&server, &scopes, &sz);
+    output("status: %d\n", rc);
+
+    if (rc != 200)
+        return;
+
+    output_scopes(scopes, sz);
+    list_registered_push_services_free_scopes(scopes);
+}
+
 static void kill_shell(int argc, char **argv)
 {
     stop = true;
@@ -587,6 +675,7 @@ struct command {
     { "addpsp", addpsp,       "addpsp scope type prjid|cert apikey|key - Add push service provider." },
     { "rmpsp",  rmpsp,        "rmpsp scope type prjid|cert apikey|key - Remove push service provider." },
     { "push",   push,         "push scope suber msg - Push message." },
+    { "list",   list,         "list - List scopes." },
 
     { "kill",   kill_shell,   "kill - Stop shell." },
     { NULL }
