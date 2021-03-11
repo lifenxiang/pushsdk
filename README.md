@@ -19,7 +19,8 @@ make && make install
     Admin obtains project ID **"push example project id"** and server key **"push example server key"** from firebase console.([Find the project ID](https://firebase.google.com/docs/projects/learn-more#find_the_project_id)) ([Firebase messaging, where to get Server Key?](https://stackoverflow.com/questions/37427709/firebase-messaging-where-to-get-server-key))
   - For APNs
     Admin obtains p12 certificate **push_example_certificate.p12** from Apple. ([How to generate a P12 Apple push certificate in 3 minutes](https://www.youtube.com/watch?v=AZzi71xs7_s&t=72s))
-- Admin deploying push server on **pushexample.com:9898**
+- Admin deploying push server on **pushexample.com:9898** 
+  
   Admin converts  **push_example_certificate.p12** into two pem files **push_example_certificate.pem** and **push_example_private_key.pem** and put them on push server under **/etc/push**. ([Export APNS keys to .PEM format](http://tleyden.github.io/blog/2016/02/03/setting-up-uniqush-with-apns))
 - Admin configuring scope **"push example scope"** on push server
   - For FCM
