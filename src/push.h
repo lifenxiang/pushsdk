@@ -82,18 +82,10 @@ int unregister_push_service(const push_server_t *push_server,
                             const char *scope,
                             const registered_data_t *data);
 
-typedef struct scope_registered_datas {
-    const char *scope;
-    int size;
-    const registered_data_t **datas;
-} scope_registered_datas_t;
-
 CARRIER_API
-int list_registered_push_services(const push_server_t *push_server,
-                                  scope_registered_datas_t **scopes, int *size);
-
-CARRIER_API
-void list_registered_push_services_free_scopes(scope_registered_datas_t *scopes);
+int list_push_services(const push_server_t *push_server,
+                       int (*iterate_callback)(const char *scope, void *context),
+                       void *context);
 
 typedef struct subscribed_cookie {
     const char *service_type;

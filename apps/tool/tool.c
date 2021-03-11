@@ -46,63 +46,10 @@ static void usage(void)
     printf("\n");
 }
 
-#define INDENT_FMT "%*s"
-#define INDENT_ARG(lv) ((lv) << 1), ""
-static void output_data(const registered_data_t *data, int indent_lv)
+static int output_scope(const char *scopes, void *context)
 {
-    union {
-        const registered_data_t *base;
-        const registered_project_key_t *prj_key;
-        const registered_certificate_t *cert;
-    } __data = {
-        .base = data
-    };
-
-    printf("{\n");
-    if (!strcmp(__data.base->service_type, "fcm")) {
-        printf(INDENT_FMT "type: fcm,\n", INDENT_ARG(indent_lv + 1));
-        printf(INDENT_FMT "apikey: %s\n", INDENT_ARG(indent_lv + 1), __data.prj_key->api_key);
-    } else {
-        printf(INDENT_FMT "type: apns,\n", INDENT_ARG(indent_lv + 1));
-        printf(INDENT_FMT "cert: %s,\n", INDENT_ARG(indent_lv + 1), __data.cert->certificate_path);
-        printf(INDENT_FMT "key: %s\n", INDENT_ARG(indent_lv + 1), __data.cert->private_key_path);
-    }
-    printf(INDENT_FMT "}", INDENT_ARG(indent_lv));
-}
-
-static void output_datas(const registered_data_t **datas, int sz, int indent_lv)
-{
-    int i;
-
-    printf("[\n");
-    for (i = 0; i < sz; ++i) {
-        printf(INDENT_FMT, INDENT_ARG(indent_lv + 1));
-        output_data(datas[i], indent_lv + 1);
-        printf(i == sz - 1 ? "\n" : ",\n");
-    }
-    printf(INDENT_FMT "]", INDENT_ARG(indent_lv));
-}
-
-static void output_scope(const scope_registered_datas_t *scope, int indent_lv)
-{
-    printf("{\n");
-    printf(INDENT_FMT "scope: %s,\n", INDENT_ARG(indent_lv + 1), scope->scope);
-    printf(INDENT_FMT "datas: ", INDENT_ARG(indent_lv + 1));
-    output_datas(scope->datas, scope->size, indent_lv + 1);
-    printf("\n" INDENT_FMT "}", INDENT_ARG(indent_lv));
-}
-
-static void output_scopes(const scope_registered_datas_t *scopes, int sz)
-{
-    int i;
-
-    printf("[\n");
-    for (i = 0; i < sz; ++i) {
-        printf(INDENT_FMT, INDENT_ARG(1));
-        output_scope(scopes + i, 1);
-        printf(i == sz - 1 ? "\n" : ",\n");
-    }
-    printf("]\n");
+    printf("%s\n", scopes);
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -169,17 +116,10 @@ int main(int argc, char *argv[])
             char *op;
             push_server_t server;
         } *args;
-        scope_registered_datas_t *scopes;
-        int size;
 
         args = (struct args *)(argv + optind);
-        rc = list_registered_push_services(&args->server, &scopes, &size);
+        rc = list_push_services(&args->server, output_scope, NULL);
         printf("status: %d\n", rc);
-
-        if (rc == 200) {
-            output_scopes(scopes, size);
-            list_registered_push_services_free_scopes(scopes);
-        }
     }
 
     return 0;

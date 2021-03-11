@@ -36,6 +36,18 @@ typedef struct {
     const char *val;
 } key_value_t;
 
+typedef struct scope_registered_datas {
+    const char *scope;
+    int size;
+    const registered_data_t **datas;
+} scope_registered_datas_t;
+
+typedef struct scopes {
+    cJSON *json;
+    int size;
+    scope_registered_datas_t scopes[];
+} scopes_t;
+
 static char *encode_x_www_form_urlencoded(http_client_t *httpc, key_value_t kvs[], size_t sz, int *len)
 {
     assert(httpc);
@@ -270,12 +282,6 @@ int unregister_push_service(const push_server_t *push_server,
     return (int)resp_stat;
 }
 
-typedef struct scopes {
-    cJSON *json;
-    int size;
-    scope_registered_datas_t scopes[];
-} scopes_t;
-
 static void deinit_scope_registered_datas(scope_registered_datas_t *datas)
 {
     assert(datas);
@@ -423,18 +429,20 @@ static scopes_t *decode_list_registered_push_services_response_body(const char *
     return scopes;
 }
 
-int list_registered_push_services(const push_server_t *push_server,
-                                  scope_registered_datas_t **scopes, int *size)
+int list_push_services(const push_server_t *push_server,
+                       int (*iterate_callback)(const char *scope, void *context),
+                       void *context)
 {
     http_client_t *http_client;
     long resp_stat;
     const char *body;
-    scopes_t *__scopes;
+    scopes_t *scopes;
     int body_len;
     int rc;
+    int i;
 
     if (!push_server || !push_server->host || !*push_server->host || !push_server->port ||
-        !*push_server->port || !scopes || !size)
+        !*push_server->port || !iterate_callback)
         return -1;
 
     http_client = http_client_new();
@@ -476,26 +484,21 @@ int list_registered_push_services(const push_server_t *push_server,
         return -1;
     }
 
-    __scopes = decode_list_registered_push_services_response_body(body, body_len);
+    scopes = decode_list_registered_push_services_response_body(body, body_len);
     http_client_close(http_client);
-    if (!__scopes)
+    if (!scopes)
         return -1;
 
-    *scopes = __scopes->scopes;
-    *size   = __scopes->size;
+    for (i = 0; i < scopes->size; ++i) {
+        rc = iterate_callback(scopes->scopes[i].scope, context);
+        if (rc) {
+            free_scopes(scopes);
+            return rc;
+        }
+    }
+    free_scopes(scopes);
 
     return 200;
-}
-
-void list_registered_push_services_free_scopes(scope_registered_datas_t *scopes)
-{
-    scopes_t *__scopes;
-
-    if (!scopes)
-        return;
-
-    __scopes = (scopes_t *)((char *)scopes - offsetof(scopes_t, scopes));
-    free_scopes(__scopes);
 }
 
 static bool subscribed_cookie_is_valid(const subscribed_cookie_t *cookie)
