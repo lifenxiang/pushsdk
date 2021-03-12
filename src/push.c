@@ -347,7 +347,7 @@ static int decode_scope_registered_datas(scope_registered_datas_t *datas, const 
 
     datas->scope = json->string;
     datas->size  = cJSON_GetArraySize(json);
-    datas->datas = calloc(datas->size, sizeof(datas->scope[0]));
+    datas->datas = calloc(datas->size, sizeof(datas->datas[0]));
 
     if (!datas->datas)
         return -1;
@@ -380,7 +380,7 @@ static void free_scopes(scopes_t *scopes)
     int i;
 
     if (scopes->json)
-        cJSON_free(scopes->json);
+        cJSON_Delete(scopes->json);
 
     for (i = 0; i < scopes->size; ++i)
         deinit_scope_registered_datas(scopes->scopes + i);
