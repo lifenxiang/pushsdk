@@ -20,8 +20,9 @@ make && make install
   - For APNs
     Admin obtains p12 certificate **push_example_certificate.p12** from Apple. ([How to generate a P12 Apple push certificate in 3 minutes](https://www.youtube.com/watch?v=AZzi71xs7_s&t=72s))
 - Admin deploying push server on **pushexample.com:9898** 
-  
-  Admin converts  **push_example_certificate.p12** into two pem files **push_example_certificate.pem** and **push_example_private_key.pem** and put them on push server under **/etc/push**. ([Export APNS keys to .PEM format](http://tleyden.github.io/blog/2016/02/03/setting-up-uniqush-with-apns))
+  - Admin installs Uniqush. ([Installing Uniqush and its Dependencies](https://uniqush.org/documentation/install.html))
+  - Admin configures Uniqush to set addr option in WebFrontend section to 0.0.0.0:9898. ([Uniqush Configuration](https://uniqush.org/documentation/config.html)) 
+  - Admin converts **push_example_certificate.p12** into two pem files **push_example_certificate.pem** and **push_example_private_key.pem** and put them on push server under **/etc/push**. ([Export APNS keys to .PEM format](http://tleyden.github.io/blog/2016/02/03/setting-up-uniqush-with-apns))
 - Admin configuring scope **"push example scope"** on push server
   - For FCM
     ```c
@@ -45,7 +46,7 @@ make && make install
         .port = "9898"
     };
     registered_certificate_t certificate = {
-        .service_type 	  = "apns",
+        .service_type     = "apns",
         .certificate_path = "/etc/push/push_example_certificate.pem",
         .private_key_path = "/etc/push/push_example_private_key.pem"
     };
@@ -55,7 +56,9 @@ make && make install
     ```
 - Admin deploying app server
 - App user installing app instance
-- App instance obtaining reg ID(for Andorid) **"push example reg id"** and dev token(for IOS) **"push example dev token"** from PSP
+- App instance obtaining reg ID(for Andorid) **"push example reg id"** and dev token(for IOS) **"push example dev token"** from PSP. 
+  ([Set up a Firebase Cloud Messaging client app on Android](https://firebase.google.com/docs/cloud-messaging/android/client))
+  ([Apple user notification](https://developer.apple.com/documentation/usernotifications))
 - App instance subscribing scope **"push example scope"** with event ID **"push example subscriber"** from push server
   - For Android
     ```c
@@ -68,7 +71,8 @@ make && make install
         .register_id  = "push example reg id"
     };
     
-    subscribe_push_service(&push_server, "push example scope", "push example subscriber", 											 (const subscribed_cookie_t *)&project_id);
+    subscribe_push_service(&push_server, "push example scope", "push example subscriber",
+                           (const subscribed_cookie_t *)&project_id);
     ```
   - For IOS
     ```c
@@ -81,7 +85,8 @@ make && make install
         .dev_token    = "push example dev token"
     };
     
-    subscribe_push_service(&push_server, "push example scope", "push example subscriber", 											 (const subscribed_cookie_t *)&dev_token);
+    subscribe_push_service(&push_server, "push example scope", "push example subscriber",
+                           (const subscribed_cookie_t *)&dev_token);
     ```
 - App instance notifying app server of its event ID **"push example subscriber"**
 - App server requesting push server to push message **"push example message"** to subscriber **"push example subscriber"** using  scope **"push example scope"**
