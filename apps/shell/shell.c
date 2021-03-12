@@ -31,12 +31,16 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <limits.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
 #include <alloca.h>
 #include <getopt.h>
+#endif
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <io.h>
+#include <crystal.h>
+#include <process.h>
 
 // Undefine Windows defined MOUSE_MOVED for PDCurses
 #undef MOUSE_MOVED
@@ -48,7 +52,6 @@
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
 #endif
 
-#include <pthread.h>
 #include <push.h>
 
 #define NUMBER_OF_HISTORY       256
@@ -66,8 +69,6 @@ static bool svr_isset;
 WINDOW *output_win_border, *output_win;
 WINDOW *log_win_border, *log_win;
 WINDOW *cmd_win_border, *cmd_win;
-
-pthread_mutex_t screen_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 
 #define OUTPUT_WIN  1
 #define LOG_WIN     2
@@ -233,11 +234,6 @@ static void init_screen(void)
     scrollok(cmd_win, true);
     waddstr(cmd_win, "# ");
     wrefresh(cmd_win);
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(struct sigaction));
-    sa.sa_handler = handle_winch;
-    sigaction(SIGWINCH, &sa, NULL);
 }
 
 static void cleanup_screen(void)
@@ -374,11 +370,9 @@ static void output(const char *format, ...)
 
     va_start(args, format);
 
-    pthread_mutex_lock(&screen_lock);
     vwprintw(output_win, format, args);
     wrefresh(output_win);
     wrefresh(cmd_win);
-    pthread_mutex_unlock(&screen_lock);
 
     va_end(args);
 }
@@ -386,13 +380,11 @@ static void output(const char *format, ...)
 static void clear_screen(int argc, char *argv[])
 {
     if (argc == 1) {
-        pthread_mutex_lock(&screen_lock);
         wclear(output_win);
         wrefresh(output_win);
         wclear(log_win);
         wrefresh(log_win);
         wrefresh(cmd_win);
-        pthread_mutex_unlock(&screen_lock);
     } else if (argc == 2) {
         WINDOW *w;
         if (strcmp(argv[1], "log") == 0)
@@ -404,11 +396,9 @@ static void clear_screen(int argc, char *argv[])
             return;
         }
 
-        pthread_mutex_lock(&screen_lock);
         wclear(w);
         wrefresh(w);
         wrefresh(cmd_win);
-        pthread_mutex_unlock(&screen_lock);
     } else {
         output("Invalid command syntax.\n");
         return;
@@ -716,7 +706,6 @@ static char *read_cmd(void)
 
     (void)h;
 
-    pthread_mutex_lock(&screen_lock);
     if (ch == 10 || ch == 13) {
         rc = mvwinnstr(cmd_win, 0, 2, cmd_line, sizeof(cmd_line));
         mvwinnstr(cmd_win, 1, 0, cmd_line + rc, sizeof(cmd_line) - rc);
@@ -735,7 +724,6 @@ static char *read_cmd(void)
 
         if (strlen(p)) {
             history_add_cmd(p);
-            pthread_mutex_unlock(&screen_lock);
             return p;
         }
 
@@ -788,7 +776,6 @@ static char *read_cmd(void)
     }
 
     wrefresh(cmd_win);
-    pthread_mutex_unlock(&screen_lock);
 
     return NULL;
 }
@@ -815,7 +802,6 @@ int main(int argc, char *argv[])
 {
     char *cmd;
     int wait_for_attach = 0;
-    int rc;
 
     int opt;
     int idx;

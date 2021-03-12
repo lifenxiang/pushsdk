@@ -7,10 +7,6 @@ include(CheckFunctionExists)
 set(SRC
     shell.c)
 
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    set(SYSTEM_LIBS pthread)
-endif()
-
 include_directories(
     ../../src
     ${CARRIER_INT_DIST_DIR}/include)
@@ -32,9 +28,9 @@ if(WIN32)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /utf-8")
     set(LIBS
         ${LIBS}
-        pthread
         pdcurses
-        Shlwapi)
+        Shlwapi
+        crystal)
 else()
     set(LIBS
         ${LIBS}

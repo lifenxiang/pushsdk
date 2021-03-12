@@ -15,4 +15,8 @@ add_submodule(curl
 if(WIN32)
     add_submodule(PDCurses
         DEPENDS platform-specific)
+    add_submodule(pthreads-w32
+        DEPENDS platform-specific)
+    add_submodule(libcrystal
+        DEPENDS platform-specific pthreads-w32)
 endif()

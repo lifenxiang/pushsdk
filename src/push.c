@@ -26,6 +26,10 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <malloc.h>
+#endif
+
 #include <cjson/cJSON.h>
 
 #include "push.h"
@@ -137,8 +141,10 @@ static char *encode_register_push_service_body(http_client_t *httpc, const char 
             {.key = "sandbox"        , .val = "true"                              }
         };
         return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-    } else
+    } else {
         assert(0);
+        return NULL;
+    }
 }
 
 int register_push_service(const push_server_t *push_server,
@@ -226,8 +232,10 @@ static char *encode_unregister_push_service_body(http_client_t *httpc, const cha
             {.key = "key"            , .val = __data.certificate->private_key_path},
         };
         return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-    } else
+    } else {
         assert(0);
+        return NULL;
+    }
 }
 
 int unregister_push_service(const push_server_t *push_server,
@@ -292,7 +300,7 @@ static void deinit_scope_registered_datas(scope_registered_datas_t *datas)
     if (datas->datas[0])
         free((void *)datas->datas[0]);
 
-    free(datas->datas);
+    free((void *)datas->datas);
 }
 
 static int decode_registered_data(registered_data_t *data, const cJSON *json)
@@ -554,8 +562,10 @@ static char *encode_subscribe_push_service_body(http_client_t *httpc, const char
             {.key = "devtoken"       , .val = __cookie.dev_token->dev_token   }
         };
         return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-    } else
+    } else {
         assert(0);
+        return NULL;
+    }
 }
 
 int subscribe_push_service(const push_server_t *push_server,
@@ -645,8 +655,10 @@ static char *encode_unsubscribe_push_service_body(http_client_t *httpc, const ch
             {.key = "devtoken"       , .val = __cookie.dev_token->dev_token   }
         };
         return encode_x_www_form_urlencoded(httpc, kvs, ARRAY_SIZE(kvs), len);
-    } else
+    } else {
         assert(0);
+        return NULL;
+    }
 }
 
 int unsubscribe_push_service(const push_server_t *push_server,

@@ -6,7 +6,8 @@ set(DEPEND_MODULES
 if(WIN32)
     set(DEPEND_MODULES
         ${DEPEND_MODULES}
-        PDCurses)
+        PDCurses
+        libcrystal)
 endif()
 
 add_submodule(pushshell
@@ -15,4 +16,4 @@ add_submodule(pushshell
 
 add_submodule(pushtool
     DIRECTORY tool
-    DEPENDS push0)
+    DEPENDS ${DEPEND_MODULES})

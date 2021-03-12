@@ -23,10 +23,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <pthread.h>
 #include <stdbool.h>
 
-#ifdef HAVE_MALLOC_H
+#if defined(_WIN32) || defined(_WIN64)
 #include <malloc.h>
 #endif
 

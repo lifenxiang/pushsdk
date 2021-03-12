@@ -27,9 +27,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
 #include <alloca.h>
 #include <getopt.h>
+#else
+#include <crystal.h>
+#include <process.h>
+#endif
 
 #include <push.h>
 
