@@ -1,14 +1,81 @@
 # Build
-```bash
-cd build
-cmake ..
-make && make install
-```
-- cmake options
+
+CMake is used to build the SDK. Build is possible on mac, ubuntu/debian linux, windows and cross compilation for raspberry pi on linux.
+
+- CMake options:
   - -DENABLE_SHARED: Build shared library.
   - -DENABLE_STATIC: Build static library.
   - -DENABLE_APPS: Build applications.
+
+- Build on mac
+
+  - Install prerequisites
+
+    ```bash
+    brew install autoconf automake libtool shtool pkg-config gettext cmake
+    ```
+
+  - Compile
+
+    ```bash
+    cd ${YOUR_PATH}/Elastos.NET.PushNotification.SDK
+    mkdir -p build/mac && cd build/mac
+    cmake ../..
+    make && make install
+    ```
+
+- Build on ubuntu/debian linux
+
+  - Install prerequisites
+
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -f build-essential autoconf automake autopoint libtool flex bison libncurses5-dev cmake
+    ```
+
+  - Compile
+
+    ```bash
+    cd ${YOUR_PATH}/Elastos.NET.PushNotification.SDK
+    mkdir -p build/linux && cd build/linux
+    cmake ../..
+    make && make install
+    ```
+
+- Build on windows
+
+  - Install prerequisites
+
+    Install Visual Studio 2017 and "Desktop development with C++" Workload.
+
+  - Compile
+
+    ```powershell
+    cd ${YOUR_PATH}/Elastos.NET.PushNotification.SDK
+    mkdir build/win
+    cd build/win
+    cmake -G "NMake Makefiles" -DCMAKE_INSTALL_PREFIX=outputs ..\..
+    nmake
+    nmake install
+    ```
+
+- Cross compilation for raspberry pi on linux
+
+  - Install prerequisites
+
+    Download [raspberry pi toolchain](https://github.com/raspberrypi/tools).
+
+  - Compile
+
+    ```bash
+    cd ${YOUR_PATH}/Elastos.NET.PushNotification.SDK
+    mkdir -p build/rpi && cd build/rpi
+    cmake -DCMAKE_INSTALL_PRFIX=outputs -DRPI_TOOLCHAIN_HOME=${YOUR-RASPBERRYPI-TOOLCHAIN-HOME} -DCMAKE_TOOLCHAIN_FILE=../../cmake/RPiToolchain.cmake ../..
+    make && make install
+    ```
+
 # Definitions
+
 - Push Service Provider(PSP)：A push service provider can push data to a device. Only FCM and APNs are supported at present. FCM and APNs projects are identified by project ID and certificate, respectively.
 - Scope：A set of PSPs, identiified by scope name.
 - App instance：Specific app instance runs on specific Android or IOS device. Android and IOS app instances are identified by reg ID and dev token, respectively.
